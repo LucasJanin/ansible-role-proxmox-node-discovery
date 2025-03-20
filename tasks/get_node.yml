@@ -1,0 +1,43 @@
+# File: tasks/get_node.yml
+# Description: Retrieve Proxmox nodes information and process each node
+# Author: Lucas Janin
+# Date: 2025-03-19
+
+- name: Retrieve Proxmox Nodes Information
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}/api2/json/nodes"
+    method: GET
+    validate_certs: "{{ proxmox_verify_ssl | default(false) }}"
+    headers:
+      Authorization: "PVEAPIToken={{ token_user }}@{{ token_realm }}!{{ token_id }}={{ proxmox_pass }}"
+  register: proxmox_nodes
+  delegate_to: localhost
+  when: "'!' in proxmox_user"
+  ignore_errors: true
+
+- name: Check if Proxmox API is accessible
+  ansible.builtin.set_fact:
+    proxmox_api_accessible: "{{ proxmox_nodes.status | default(-1) == 200 }}"
+  delegate_to: localhost
+  run_once: true
+  when: "'!' in proxmox_user"
+
+- name: Store node names
+  ansible.builtin.set_fact:
+    proxmox_node_names: "{{ proxmox_nodes.json.data | default([]) | map(attribute='node') | list }}"
+  when: "proxmox_nodes.json is defined and proxmox_nodes.json.data is defined"
+
+- name: Initialize hostname to node and status mapping
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: {}
+    node_containers: {}
+
+- name: Process each node
+  include_tasks: process_node.yml
+  loop: "{{ proxmox_node_names }}"
+  loop_control:
+    loop_var: current_node
+  when: 
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)

@@ -1,0 +1,18 @@
+# Molecule
+.molecule/
+molecule/default/molecule.local.yml
+molecule/default/vars.local.yml
+
+# Python
+*.pyc
+__pycache__/
+
+# SSH et secrets
+*.pem
+*.key
+id_rsa*
+secrets.yml
+
+# Éditeurs
+.vscode/
+.idea/

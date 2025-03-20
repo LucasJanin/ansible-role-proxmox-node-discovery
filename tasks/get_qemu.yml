@@ -1,0 +1,86 @@
+# File: tasks/get_qemu.yml
+# Description: Extract QEMU agent status from Proxmox VM configs
+# Author: Lucas Janin
+# Date: 2025-03-19
+
+# Check if QEMU agent is enabled in VM config
+- name: Check if QEMU agent is enabled in VM config
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      host_config.item: hostname_to_info_mapping[host_config.item] | combine({
+        'qemu_agent_configured': host_config.json.data.agent is defined and host_config.json.data.agent == '1',
+        'qemu_agent_fixed': host_config.json.data.agent is defined and host_config.json.data.agent == 'fixed'
+      })
+      }) }}"
+  loop: "{{ host_configs.results | default([]) }}"
+  loop_control:
+    loop_var: host_config
+    label: "QEMU config check for {{ host_config.item }}"
+  delegate_to: localhost
+  when: 
+    - hostname_to_info_mapping is defined
+    - host_config is defined
+    - host_config.json is defined
+    - host_config.json.data is defined
+    - host_config.item in hostname_to_info_mapping
+    - hostvars[host_config.item].proxmox_type | default('') == 'vm'
+
+# Check if QEMU agent is running for VMs
+- name: Check if QEMU agent is running for VMs
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}/api2/json/nodes/{{ hostvars[item].proxmox_node }}/qemu/{{ hostvars[item].proxmox_id }}/agent/info"
+    method: GET
+    validate_certs: "{{ proxmox_verify_ssl | default(false) }}"
+    headers:
+      Authorization: "PVEAPIToken={{ token_user }}@{{ token_realm }}!{{ token_id }}={{ proxmox_pass }}"
+    status_code: [200, 500, 501, 502]  # Accept various error codes
+  loop: "{{ ansible_play_hosts_all }}"
+  register: qemu_agent_status
+  delegate_to: localhost
+  when:
+    - hostname_to_info_mapping is defined
+    - item in hostname_to_info_mapping
+    - hostvars[item].proxmox_type | default('') == 'vm'
+  run_once: true
+  ignore_errors: true
+
+# Update hostname_to_info_mapping with QEMU agent running status
+- name: Update hostname_to_info_mapping with QEMU agent running status
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      check_result.item: hostname_to_info_mapping[check_result.item] | combine({
+        'qemu_agent_running': check_result.status == 200 and check_result.json is defined and check_result.json.data is defined
+      })
+      }) }}"
+  loop: "{{ qemu_agent_status.results | default([]) }}"
+  loop_control:
+    loop_var: check_result
+    label: "QEMU status check for {{ check_result.item }}"
+  delegate_to: localhost
+  when: 
+    - qemu_agent_status is defined
+    - qemu_agent_status.results is defined
+    - check_result is defined
+    - hostname_to_info_mapping is defined
+    - check_result.item in hostname_to_info_mapping
+    - hostvars[check_result.item].proxmox_type | default('') == 'vm'
+
+# Populate proxmox_qemu variable for each host
+- name: Populate proxmox_qemu variable for each host
+  ansible.builtin.set_fact:
+    proxmox_qemu: "{{ qemu_status }}"
+  vars:
+    qemu_status: "{{ 
+      'running' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_running | default(false) else
+      'configured' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_configured | default(false) else
+      'fixed' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_fixed | default(false) else
+      'disabled' if item in hostname_to_info_mapping and hostvars[item].proxmox_type | default('') == 'vm' else
+      '' }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  when: 
+    - discovery_proxmox_qemu | default(false)
+    - hostname_to_info_mapping is defined
+    - item in hostname_to_info_mapping
+    - hostvars[item].proxmox_type | default('') == 'vm'

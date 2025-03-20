@@ -1,0 +1,44 @@
+---
+# Test playbook for ansible-role-proxmox-node-discovery
+- name: Test Proxmox Node Discovery Role
+  hosts: all
+  gather_facts: true
+  vars:
+    proxmox_host: "proxmox.example.com"
+    proxmox_user: "ansible@pve!ansible-token"
+    proxmox_pass: "{{ vault_proxmox_token }}"
+    proxmox_verify_ssl: false
+  
+  tasks:
+    - name: Include Proxmox node discovery role
+      include_role:
+        name: ansible-role-proxmox-node-discovery
+      vars:
+        discovery_proxmox_macaddress: true
+        discovery_proxmox_qemu: true
+        discovery_proxmox_resources: true
+      when: 
+        - proxmox_host is defined
+        - proxmox_user is defined
+        - proxmox_pass is defined
+        
+    - name: Display discovered Proxmox information
+      debug:
+        msg: |
+          Host: {{ inventory_hostname }}
+          Proxmox Node: {{ proxmox_node | default('Not found') }}
+          Proxmox ID: {{ proxmox_id | default('Not found') }}
+          Proxmox Type: {{ proxmox_type | default('Not found') }}
+          Proxmox Status: {{ proxmox_status | default('Not found') }}
+          Proxmox Management: {{ proxmox_management | default('Not found') }}
+          {% if discovery_proxmox_resources | default(false) %}
+          Proxmox Cores: {{ proxmox_cores | default('Not found') }}
+          Proxmox Memory: {{ proxmox_memory | default('Not found') }}
+          {% endif %}
+          {% if discovery_proxmox_qemu | default(false) %}
+          Proxmox QEMU Agent: {{ proxmox_qemu | default('Not found') }}
+          {% endif %}
+          {% if discovery_proxmox_macaddress | default(false) %}
+          MAC Address: {{ macaddress | default('Not found') }}
+          {% endif %}
+      when: proxmox_node is defined and proxmox_node != ''

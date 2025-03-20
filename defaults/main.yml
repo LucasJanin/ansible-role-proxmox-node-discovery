@@ -1,0 +1,30 @@
+---
+# Default variables for Proxmox node discovery
+
+#
+# API Connection Settings
+#
+
+# Timeout in seconds for API requests
+discovery_timeout: 30
+
+# Whether to validate SSL certificates when connecting to the Proxmox API
+# Set to true in production environments with valid certificates
+proxmox_verify_ssl: false
+
+#
+# Feature Toggles
+#
+
+# Enable MAC address discovery from Proxmox VM/LXC configs
+# When enabled, sets the 'macaddress' variable for each host
+discovery_proxmox_macaddress: false
+
+# Enable QEMU agent status discovery for VMs
+# When enabled, sets the 'proxmox_qemu' variable for each VM host
+# Possible values: 'running', 'configured', 'fixed', 'disabled'
+discovery_proxmox_qemu: false
+
+# Enable resource (cores/memory) discovery from Proxmox VM/LXC configs
+# When enabled, sets 'proxmox_cores' and 'proxmox_memory' variables for each host
+discovery_proxmox_resources: false

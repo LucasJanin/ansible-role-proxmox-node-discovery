@@ -1,0 +1,41 @@
+---
+# Example playbook for ansible-role-proxmox-node-discovery
+- name: Discover Proxmox VMs and containers
+  hosts: all
+  gather_facts: true
+  vars:
+    # These variables should be stored securely in Ansible Vault
+    proxmox_host: "proxmox.example.com"
+    proxmox_user: "ansible@pve!ansible-token"
+    proxmox_pass: "{{ vault_proxmox_token }}"
+    proxmox_verify_ssl: false
+  
+  tasks:
+    - name: Include Proxmox node discovery role
+      include_role:
+        name: ansible-role-proxmox-node-discovery
+      vars:
+        discovery_proxmox_macaddress: true  # Enable MAC address discovery
+        discovery_proxmox_qemu: true        # Enable QEMU agent status discovery
+        discovery_proxmox_resources: true   # Enable resource (cores/memory) discovery
+      when: 
+        - proxmox_host is defined
+        - proxmox_user is defined
+        - proxmox_pass is defined
+    
+    # Example of how to use the discovered information
+    - name: Display VM/container status
+      debug:
+        msg: "{{ inventory_hostname }} is {{ proxmox_status }} on node {{ proxmox_node }}"
+      when: proxmox_node is defined and proxmox_node != ''
+    
+    # Example of conditional task based on VM/container type
+    - name: Perform VM-specific tasks
+      debug:
+        msg: "Performing VM-specific tasks on {{ inventory_hostname }}"
+      when: proxmox_type is defined and proxmox_type == 'vm'
+    
+    - name: Perform LXC-specific tasks
+      debug:
+        msg: "Performing LXC-specific tasks on {{ inventory_hostname }}"
+      when: proxmox_type is defined and proxmox_type == 'lxc'

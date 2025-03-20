@@ -1,0 +1,76 @@
+# File: tasks/main.yml
+# Description: Discover Proxmox nodes and their LXC/VM status via API
+# Author: Lucas Janin
+# Date: 2025-03-01
+
+- name: Validate Proxmox API prerequisites
+  ansible.builtin.assert:
+    that:
+      - proxmox_host is defined
+      - proxmox_user is defined
+      - proxmox_pass is defined
+      - ansible_play_hosts_all is defined
+    fail_msg: "Proxmox API connection parameters or device hostnames are missing"
+
+# Parse the API token information
+- name: Parse API token information
+  ansible.builtin.set_fact:
+    token_user: "{{ proxmox_user.split('@')[0] }}"
+    token_realm: "{{ proxmox_user.split('@')[1].split('!')[0] }}"
+    token_id: "{{ proxmox_user.split('!')[1] }}"
+  when: "'!' in proxmox_user"
+
+# Get nodes information
+- name: Get nodes information
+  include_tasks: get_node.yml
+  when: 
+    - "'!' in proxmox_user"
+
+# Get config for LXCs and VMs
+- name: Get config for LXCs and VMs
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}/api2/json/nodes/{{ hostvars[item].proxmox_node }}/{{ hostvars[item].proxmox_management }}/{{ hostvars[item].proxmox_id }}/config"
+    method: GET
+    validate_certs: "{{ proxmox_verify_ssl }}"
+    headers:
+      Authorization: "PVEAPIToken={{ token_user }}@{{ token_realm }}!{{ token_id }}={{ proxmox_pass }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  register: host_configs
+  delegate_to: localhost
+  when: 
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)
+    - hostvars[item].proxmox_id is defined
+    - hostvars[item].proxmox_id | default('') != ''
+    - hostvars[item].proxmox_node is defined
+    - hostvars[item].proxmox_node | default('') != ''
+    - hostvars[item].proxmox_management is defined
+    - hostvars[item].proxmox_management | default('') != ''
+
+# Process MAC addresses from Proxmox configs
+- name: Process MAC addresses from Proxmox configs
+  include_tasks: get_macaddress.yml
+  when: 
+    - discovery_proxmox_macaddress | default(false)
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)
+
+# Process QEMU agent from Proxmox configs
+- name: Process QEMU agent from Proxmox configs
+  include_tasks: get_qemu.yml
+  when: 
+    - discovery_proxmox_qemu | default(false)
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)
+
+# Get resources for LXCs and VMs
+- name: Get resources for LXCs and VMs
+  include_tasks: get_resources.yml
+  when: 
+    - discovery_proxmox_resources | default(false)
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)

@@ -1,0 +1,14 @@
+[proxmox_hosts]
+proxmox.example.com
+
+[vms]
+vm1 ansible_host=192.168.1.101 proxmox_id=101
+vm2 ansible_host=192.168.1.102 proxmox_id=102
+
+[containers]
+lxc1 ansible_host=192.168.1.201 proxmox_id=201
+lxc2 ansible_host=192.168.1.202 proxmox_id=202
+
+[all:vars]
+ansible_connection=local
+ansible_python_interpreter=python3

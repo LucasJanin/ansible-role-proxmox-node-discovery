@@ -1,0 +1,45 @@
+# File: tasks/get_resources.yml
+# Description: Extract cores and memory from Proxmox VM configs
+# Author: Lucas Janin
+# Date: 2025-03-19
+
+# Extract cores and memory from host configs
+- name: Extract cores and memory from host configs
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      config_result.item: hostname_to_info_mapping[config_result.item] | default({}) | combine({
+        'cores': cores_value,
+        'memory': config_result.json.data.memory | default(512) | int
+      })}) }}"
+  vars:
+    is_vm: "{{ hostvars[config_result.item].proxmox_type | default('') == 'vm' }}"
+    cores_value: "{{ 
+      (config_result.json.data.sockets | default(1) | int * config_result.json.data.cores | default(1) | int) 
+      if is_vm 
+      else (config_result.json.data.cores | default(1) | int) }}"
+  loop: "{{ host_configs.results | default([]) }}"
+  loop_control:
+    loop_var: config_result
+    label: "{{ 'VM' if hostvars[config_result.item].proxmox_type | default('') == 'vm' else 'LXC' }} {{ config_result.item }}"
+  delegate_to: localhost
+  when: 
+    - hostname_to_info_mapping is defined
+    - host_configs is defined
+    - config_result is defined
+    - config_result.json is defined
+    - config_result.json.data is defined
+    - config_result.item in hostname_to_info_mapping
+
+# Populate proxmox_cores and proxmox_memory variables for each host
+- name: Populate proxmox_cores and proxmox_memory variables for each host
+  ansible.builtin.set_fact:
+    proxmox_cores: "{{ hostname_to_info_mapping[item].cores | default('') }}"
+    proxmox_memory: "{{ hostname_to_info_mapping[item].memory | default('') }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  when: 
+    - hostname_to_info_mapping is defined
+    - item in hostname_to_info_mapping
+    - hostname_to_info_mapping[item].cores is defined
+    - hostname_to_info_mapping[item].memory is defined

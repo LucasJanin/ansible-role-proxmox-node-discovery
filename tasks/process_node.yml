@@ -1,0 +1,150 @@
+# File: tasks/process_node.yml
+# Description: Process a single Proxmox node to discover VMs and LXCs
+# Author: Lucas Janin
+# Date: 2025-03-01
+
+# Get all LXC containers on the current node
+- name: Get LXC containers on {{ current_node }}
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}/api2/json/nodes/{{ current_node }}/lxc"
+    method: GET
+    validate_certs: "{{ proxmox_verify_ssl }}"
+    headers:
+      Authorization: "PVEAPIToken={{ token_user }}@{{ token_realm }}!{{ token_id }}={{ proxmox_pass }}"
+  register: node_lxcs
+  ignore_errors: true
+  failed_when: false
+  delegate_to: localhost
+
+# Set default empty data if LXC request failed
+- name: Set default empty LXC data if request failed
+  ansible.builtin.set_fact:
+    node_lxcs: 
+      json:
+        data: []
+  when: 
+    - node_lxcs is failed or node_lxcs.status == -1
+    - node_lxcs.json is not defined or node_lxcs.json.data is not defined
+  delegate_to: localhost
+
+# Get all VMs on the current node
+- name: Get VMs on {{ current_node }}
+  ansible.builtin.uri:
+    url: "https://{{ proxmox_host }}/api2/json/nodes/{{ current_node }}/qemu"
+    method: GET
+    validate_certs: "{{ proxmox_verify_ssl }}"
+    headers:
+      Authorization: "PVEAPIToken={{ token_user }}@{{ token_realm }}!{{ token_id }}={{ proxmox_pass }}"
+  register: node_vms
+  ignore_errors: true
+  failed_when: false
+  delegate_to: localhost
+
+# Set default empty data if VM request failed
+- name: Set default empty VM data if request failed
+  ansible.builtin.set_fact:
+    node_vms: 
+      json:
+        data: []
+  when: 
+    - node_vms is failed or node_vms.status == -1
+    - node_vms.json is not defined or node_vms.json.data is not defined
+  delegate_to: localhost
+
+# Create a mapping of all containers and VMs by name
+- name: Create mapping of all containers and VMs by name on {{ current_node }}
+  ansible.builtin.set_fact:
+    node_containers: "{{ node_containers | default({}) | combine({
+      item.name: node_containers[item.name] | default([]) + [{
+        'id': item.vmid,
+        'name': item.name,
+        'node': current_node,
+        'status': item.status,
+        'type': 'lxc'
+      }]}, recursive=True) }}"
+  loop: "{{ node_lxcs.json.data | default([]) }}"
+  when: node_lxcs.json is defined and node_lxcs.json.data is defined
+  delegate_to: localhost
+
+- name: Add VMs to the mapping on {{ current_node }}
+  ansible.builtin.set_fact:
+    node_containers: "{{ node_containers | default({}) | combine({
+      item.name: node_containers[item.name] | default([]) + [{
+        'id': item.vmid,
+        'name': item.name,
+        'node': current_node,
+        'status': item.status,
+        'type': 'vm'
+      }]}, recursive=True) }}"
+  loop: "{{ node_vms.json.data | default([]) }}"
+  when: node_vms.json is defined and node_vms.json.data is defined
+  delegate_to: localhost
+
+# Update the hostname_to_info_mapping for each hostname in ansible_play_hosts_all
+- name: Update hostname_to_info_mapping for {{ current_node }}
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      item: matching_container}) }}"
+  vars:
+    # Essayer de trouver un conteneur avec le même ID si défini dans l'inventaire
+    matching_container: "{{ 
+      (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | first) 
+      if item in node_containers and hostvars[item].proxmox_id is defined and 
+        (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | length > 0)
+      else (node_containers[item][0] if item in node_containers else {})}}"
+  loop: "{{ ansible_play_hosts_all }}"
+  when: 
+    - node_containers is defined
+    - item in node_containers
+    - node_containers[item] | length > 0
+    - item not in hostname_to_info_mapping or (hostvars[item].proxmox_id is defined and hostname_to_info_mapping[item].id != hostvars[item].proxmox_id | int)
+  delegate_to: localhost
+
+# Log warning for duplicate hostnames
+- name: Log warning for duplicate hostnames on {{ current_node }}
+  ansible.builtin.debug:
+    msg: "WARNING: Hostname '{{ item }}' has {{ node_containers[item] | length }} instances. Using the first one ({{ node_containers[item][0].type }} with ID {{ node_containers[item][0].id }}). Other instances: {{ node_containers[item][1:] | map(attribute='type') | zip(node_containers[item][1:] | map(attribute='id')) | map('join', ' with ID ') | join(', ') }}"
+  loop: "{{ node_containers.keys() | list }}"
+  when:
+    - node_containers is defined
+    - node_containers[item] | length > 1
+    - item in ansible_play_hosts_all
+  delegate_to: localhost
+
+# Définir les variables pour chaque hôte individuellement
+- name: Save node, status, type, and ID to hostvars for each host
+  ansible.builtin.set_fact:
+    proxmox_node: "{{ hostname_to_info_mapping[item].node if item in hostname_to_info_mapping else '' }}"
+    proxmox_status: "{{ hostname_to_info_mapping[item].status if item in hostname_to_info_mapping else '' }}"
+    proxmox_type: "{{ hostname_to_info_mapping[item].type if item in hostname_to_info_mapping else '' }}"
+    proxmox_id: "{{ hostname_to_info_mapping[item].id if item in hostname_to_info_mapping else '' }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  when: 
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)
+
+# Log warning for hostnames not found in Proxmox
+- name: Log warning for hostnames not found in Proxmox
+  ansible.builtin.debug:
+    msg: "WARNING: Hostname '{{ item }}' not found in any Proxmox node"
+  loop: "{{ ansible_play_hosts_all }}"
+  when:
+    - proxmox_api_accessible | default(false)
+    - item not in hostname_to_info_mapping
+    - hostvars[item].proxmox_id is defined
+
+# Create a dictionary with proxmox management types for all hosts
+- name: Set proxmox_managements for all hosts
+  ansible.builtin.set_fact:
+    proxmox_management: >-
+      {% if hostvars[item].proxmox_type | default('') | lower == 'lxc' %}lxc{% elif hostvars[item].proxmox_type | default('') | lower == 'vm' %}qemu{% else %}''{% endif %}
+  loop: "{{ ansible_play_hosts_all }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  when: 
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)

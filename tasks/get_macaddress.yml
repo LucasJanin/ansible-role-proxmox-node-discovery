@@ -1,0 +1,62 @@
+# File: tasks/get_macaddress.yml
+# Description: Extract MAC addresses from Proxmox VM/LXC configs
+# Author: Lucas Janin
+# Date: 2025-03-19
+
+# Process LXC and VM configs to extract MAC addresses
+- name: Process configs to extract MAC addresses for LXC
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      host_config.item: hostname_to_info_mapping[host_config.item] | combine({
+        'mac_address': [host_config.json.data.net0 | regex_search('hwaddr=([0-9A-F:]+)', '\\1') | first | lower]
+      })
+      }) }}"
+  loop: "{{ host_configs.results | default([]) }}"
+  loop_control:
+    loop_var: host_config
+    label: "{{ host_config.item }}"
+  when: 
+    - discovery_proxmox_macaddress
+    - hostname_to_info_mapping is defined
+    - host_config is defined
+    - host_config.json is defined
+    - host_config.json.data is defined
+    - host_config.json.data.net0 is defined
+    - host_config.item in hostname_to_info_mapping
+    - hostname_to_info_mapping[host_config.item].type == 'lxc'
+    - host_config.json.data.net0 is search('hwaddr=')
+
+# Process VM configs to extract MAC addresses
+- name: Process configs to extract MAC addresses for VM
+  ansible.builtin.set_fact:
+    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
+      host_config.item: hostname_to_info_mapping[host_config.item] | combine({
+        'mac_address': [host_config.json.data.net0 | regex_search('virtio=([0-9A-F:]+)', '\\1') | first | lower]
+      })
+      }) }}"
+  loop: "{{ host_configs.results | default([]) }}"
+  loop_control:
+    loop_var: host_config
+    label: "{{ host_config.item }}"
+  when: 
+    - discovery_proxmox_macaddress
+    - host_config is defined
+    - host_config.json is defined
+    - host_config.json.data is defined
+    - host_config.json.data.net0 is defined
+    - host_config.item in hostname_to_info_mapping
+    - hostname_to_info_mapping[host_config.item].type == 'vm'
+    - host_config.json.data.net0 is search('virtio=')
+
+# Save MAC addresses to hostvars
+- name: Save MAC addresses to hostvars
+  ansible.builtin.set_fact:
+    macaddress: "{{ (item in hostname_to_info_mapping and 'mac_address' in hostname_to_info_mapping[item]) | ternary(hostname_to_info_mapping[item].mac_address[0], hostvars[item].macaddress | default('')) }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  when: 
+    - discovery_proxmox_macaddress
+    - proxmox_node_names is defined
+    - "'!' in proxmox_user"
+    - proxmox_api_accessible | default(false)
