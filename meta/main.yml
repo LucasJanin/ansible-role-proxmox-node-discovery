@@ -3,25 +3,26 @@ galaxy_info:
   role_name: proxmox_node_discovery
   author: Lucas Janin
   description: Ansible role that discovers Proxmox VE nodes, containers (LXC), and virtual machines (QEMU) via the Proxmox API
-  company: ""
+  company: lucasjanin.com
   license: MIT
-  min_ansible_version: "2.9"
-  
+  min_ansible_version: "2.12"  # Updated to a more recent version
+
   platforms:
     - name: Ubuntu
       versions:
-        - bionic
-        - focal
-        - jammy
+        - bionic    # 18.04
+        - focal     # 20.04
+        - jammy     # 22.04
+        - mantic    # 23.10
     - name: Debian
       versions:
-        - buster
-        - bullseye
-        - bookworm
-    - name: EL  # Enterprise Linux
+        - buster    # 10
+        - bullseye  # 11
+        - bookworm  # 12
+    - name: EL      # Enterprise Linux
       versions:
-        - 8
-        - 9
+        - '8'
+        - '9'
 
   galaxy_tags:
     - proxmox

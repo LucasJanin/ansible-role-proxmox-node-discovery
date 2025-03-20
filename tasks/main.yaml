@@ -22,14 +22,16 @@
 
 # Get nodes information
 - name: Get nodes information
-  include_tasks: get_node.yml
-  when: 
+  ansible.builtin.include_tasks: get_node.yml
+  when:
     - "'!' in proxmox_user"
 
 # Get config for LXCs and VMs
 - name: Get config for LXCs and VMs
   ansible.builtin.uri:
-    url: "https://{{ proxmox_host }}/api2/json/nodes/{{ hostvars[item].proxmox_node }}/{{ hostvars[item].proxmox_management }}/{{ hostvars[item].proxmox_id }}/config"
+    url: >-
+      https://{{ proxmox_host }}/api2/json/nodes/{{ hostvars[item].proxmox_node }}/{{
+      hostvars[item].proxmox_management }}/{{ hostvars[item].proxmox_id }}/config
     method: GET
     validate_certs: "{{ proxmox_verify_ssl }}"
     headers:
@@ -37,7 +39,7 @@
   loop: "{{ ansible_play_hosts_all }}"
   register: host_configs
   delegate_to: localhost
-  when: 
+  when:
     - proxmox_node_names is defined
     - "'!' in proxmox_user"
     - proxmox_api_accessible | default(false)
@@ -50,8 +52,8 @@
 
 # Process MAC addresses from Proxmox configs
 - name: Process MAC addresses from Proxmox configs
-  include_tasks: get_macaddress.yml
-  when: 
+  ansible.builtin.include_tasks: get_macaddress.yml
+  when:
     - discovery_proxmox_macaddress | default(false)
     - proxmox_node_names is defined
     - "'!' in proxmox_user"
@@ -59,8 +61,8 @@
 
 # Process QEMU agent from Proxmox configs
 - name: Process QEMU agent from Proxmox configs
-  include_tasks: get_qemu.yml
-  when: 
+  ansible.builtin.include_tasks: get_qemu.yml
+  when:
     - discovery_proxmox_qemu | default(false)
     - proxmox_node_names is defined
     - "'!' in proxmox_user"
@@ -68,8 +70,8 @@
 
 # Get resources for LXCs and VMs
 - name: Get resources for LXCs and VMs
-  include_tasks: get_resources.yml
-  when: 
+  ansible.builtin.include_tasks: get_resources.yml
+  when:
     - discovery_proxmox_resources | default(false)
     - proxmox_node_names is defined
     - "'!' in proxmox_user"

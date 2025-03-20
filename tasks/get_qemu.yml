@@ -8,7 +8,7 @@
   ansible.builtin.set_fact:
     hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
       host_config.item: hostname_to_info_mapping[host_config.item] | combine({
-        'qemu_agent_configured': host_config.json.data.agent is defined and host_config.json.data.agent == '1',
+        'qemu_agent_configured': host_config.json.data.agent is defined and host_config.json.data.agent == 1,
         'qemu_agent_fixed': host_config.json.data.agent is defined and host_config.json.data.agent == 'fixed'
       })
       }) }}"
@@ -17,7 +17,7 @@
     loop_var: host_config
     label: "QEMU config check for {{ host_config.item }}"
   delegate_to: localhost
-  when: 
+  when:
     - hostname_to_info_mapping is defined
     - host_config is defined
     - host_config.json is defined
@@ -57,7 +57,7 @@
     loop_var: check_result
     label: "QEMU status check for {{ check_result.item }}"
   delegate_to: localhost
-  when: 
+  when:
     - qemu_agent_status is defined
     - qemu_agent_status.results is defined
     - check_result is defined
@@ -70,7 +70,7 @@
   ansible.builtin.set_fact:
     proxmox_qemu: "{{ qemu_status }}"
   vars:
-    qemu_status: "{{ 
+    qemu_status: "{{
       'running' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_running | default(false) else
       'configured' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_configured | default(false) else
       'fixed' if item in hostname_to_info_mapping and hostname_to_info_mapping[item].qemu_agent_fixed | default(false) else
@@ -79,7 +79,7 @@
   loop: "{{ ansible_play_hosts_all }}"
   delegate_to: "{{ item }}"
   delegate_facts: true
-  when: 
+  when:
     - discovery_proxmox_qemu | default(false)
     - hostname_to_info_mapping is defined
     - item in hostname_to_info_mapping

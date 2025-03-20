@@ -8,22 +8,22 @@
     proxmox_user: "ansible@pve!ansible-token"
     proxmox_pass: "{{ vault_proxmox_token }}"
     proxmox_verify_ssl: false
-  
+
   tasks:
     - name: Include Proxmox node discovery role
-      include_role:
+      ansible.builtin.include_role:
         name: ansible-role-proxmox-node-discovery
       vars:
         discovery_proxmox_macaddress: true
         discovery_proxmox_qemu: true
         discovery_proxmox_resources: true
-      when: 
+      when:
         - proxmox_host is defined
         - proxmox_user is defined
         - proxmox_pass is defined
-        
+
     - name: Display discovered Proxmox information
-      debug:
+      ansible.builtin.debug:
         msg: |
           Host: {{ inventory_hostname }}
           Proxmox Node: {{ proxmox_node | default('Not found') }}

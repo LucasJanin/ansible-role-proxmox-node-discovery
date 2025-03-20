@@ -33,11 +33,11 @@
     node_containers: {}
 
 - name: Process each node
-  include_tasks: process_node.yml
+  ansible.builtin.include_tasks: process_node.yml
   loop: "{{ proxmox_node_names }}"
   loop_control:
     loop_var: current_node
-  when: 
+  when:
     - proxmox_node_names is defined
     - "'!' in proxmox_user"
     - proxmox_api_accessible | default(false)

@@ -7,22 +7,18 @@
 - name: Extract cores and memory from host configs
   ansible.builtin.set_fact:
     hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
-      config_result.item: hostname_to_info_mapping[config_result.item] | default({}) | combine({
-        'cores': cores_value,
-        'memory': config_result.json.data.memory | default(512) | int
-      })}) }}"
-  vars:
-    is_vm: "{{ hostvars[config_result.item].proxmox_type | default('') == 'vm' }}"
-    cores_value: "{{ 
-      (config_result.json.data.sockets | default(1) | int * config_result.json.data.cores | default(1) | int) 
-      if is_vm 
-      else (config_result.json.data.cores | default(1) | int) }}"
+      config_result.item: (
+        hostname_to_info_mapping[config_result.item] | default({})) | combine({
+          'cores': (config_result.json.data.sockets | default(1) | int * config_result.json.data.cores | default(1) | int) | int,
+          'memory': (config_result.json.data.memory | default(512) | int) | int
+        })
+      }) }}"
   loop: "{{ host_configs.results | default([]) }}"
   loop_control:
     loop_var: config_result
     label: "{{ 'VM' if hostvars[config_result.item].proxmox_type | default('') == 'vm' else 'LXC' }} {{ config_result.item }}"
   delegate_to: localhost
-  when: 
+  when:
     - hostname_to_info_mapping is defined
     - host_configs is defined
     - config_result is defined
@@ -38,7 +34,7 @@
   loop: "{{ ansible_play_hosts_all }}"
   delegate_to: "{{ item }}"
   delegate_facts: true
-  when: 
+  when:
     - hostname_to_info_mapping is defined
     - item in hostname_to_info_mapping
     - hostname_to_info_mapping[item].cores is defined
