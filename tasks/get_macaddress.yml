@@ -6,11 +6,16 @@
 # Process LXC and VM configs to extract MAC addresses
 - name: Process configs to extract MAC addresses for LXC
   ansible.builtin.set_fact:
-    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
-      host_config.item: hostname_to_info_mapping[host_config.item] | combine({
-        'mac_address': [host_config.json.data.net0 | regex_search('hwaddr=([0-9A-F:]+)', '\\1') | first | lower]
-      })
-      }) }}"
+    hostname_to_info_mapping: >-
+      {{ hostname_to_info_mapping | combine(
+        {host_config.item: hostname_to_info_mapping[host_config.item] | combine(
+          {'mac_address': [
+            (host_config.json.data.net0 | regex_findall('hwaddr=([0-9A-Fa-f:]+)') | first | lower)
+            if (host_config.json.data.net0 | regex_findall('hwaddr=([0-9A-Fa-f:]+)'))
+            else ''
+          ]}
+        )}
+      ) }}
   loop: "{{ host_configs.results | default([]) }}"
   loop_control:
     loop_var: host_config
@@ -29,11 +34,16 @@
 # Process VM configs to extract MAC addresses
 - name: Process configs to extract MAC addresses for VM
   ansible.builtin.set_fact:
-    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
-      host_config.item: hostname_to_info_mapping[host_config.item] | combine({
-      'mac_address': [host_config.json.data.net0 | regex_search('virtio=([0-9A-F:]+)', '\\1') | first | lower]
-      })
-      }) }}"
+    hostname_to_info_mapping: >-
+      {{ hostname_to_info_mapping | combine(
+        {host_config.item: hostname_to_info_mapping[host_config.item] | combine(
+          {'mac_address': [
+            (host_config.json.data.net0 | regex_findall('virtio=([0-9A-Fa-f:]+)') | first | lower)
+            if (host_config.json.data.net0 | regex_findall('virtio=([0-9A-Fa-f:]+)'))
+            else ''
+          ]}
+        )}
+      ) }}
   loop: "{{ host_configs.results | default([]) }}"
   loop_control:
     loop_var: host_config
@@ -51,8 +61,10 @@
 # Save MAC addresses to hostvars
 - name: Save MAC addresses to hostvars
   ansible.builtin.set_fact:
-    macaddress: "{{ (item in hostname_to_info_mapping and 'mac_address' in
-      hostname_to_info_mapping[item]) | ternary(hostname_to_info_mapping[item].mac_address[0], hostvars[item].macaddress | default('')) }}"
+    macaddress: >-
+      {{ (item in hostname_to_info_mapping and 'mac_address' in hostname_to_info_mapping[item] and
+          hostname_to_info_mapping[item].mac_address[0] != '') |
+          ternary(hostname_to_info_mapping[item].mac_address[0], hostvars[item].macaddress | default('')) }}
   loop: "{{ ansible_play_hosts_all }}"
   delegate_to: "{{ item }}"
   delegate_facts: true

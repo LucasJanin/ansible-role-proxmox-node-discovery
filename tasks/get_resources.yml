@@ -6,13 +6,18 @@
 # Extract cores and memory from host configs
 - name: Extract cores and memory from host configs
   ansible.builtin.set_fact:
-    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
-      config_result.item: (
-        hostname_to_info_mapping[config_result.item] | default({})) | combine({
-          'cores': (config_result.json.data.sockets | default(1) | int * config_result.json.data.cores | default(1) | int) | int,
-          'memory': (config_result.json.data.memory | default(512) | int) | int
-        })
-      }) }}"
+    hostname_to_info_mapping: >-
+      {{ hostname_to_info_mapping | combine(
+        {config_result.item: (
+          hostname_to_info_mapping[config_result.item] | default({})) | combine(
+            {
+              'cores': (config_result.json.data.sockets | default(1) | int *
+                        config_result.json.data.cores | default(1) | int) | int,
+              'memory': (config_result.json.data.memory | default(512) | int) | int
+            }
+          )
+        }
+      ) }}
   loop: "{{ host_configs.results | default([]) }}"
   loop_control:
     loop_var: config_result

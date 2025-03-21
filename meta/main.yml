@@ -5,7 +5,7 @@ galaxy_info:
   description: Ansible role that discovers Proxmox VE nodes, containers (LXC), and virtual machines (QEMU) via the Proxmox API
   company: lucasjanin.com
   license: MIT
-  min_ansible_version: "2.12"  # Updated to a more recent version
+  min_ansible_version: "2.12"
 
   platforms:
     - name: Ubuntu

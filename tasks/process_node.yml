@@ -54,28 +54,36 @@
 # Create a mapping of all containers and VMs by name
 - name: Create mapping of all containers and VMs by name on {{ current_node }}
   ansible.builtin.set_fact:
-    node_containers: "{{ node_containers | default({}) | combine({
-      item.name: node_containers[item.name] | default([]) + [{
-        'id': item.vmid,
-        'name': item.name,
-        'node': current_node,
-        'status': item.status,
-        'type': 'lxc'
-      }]}, recursive=True) }}"
+    node_containers: >-
+      {{ node_containers | default({}) | combine(
+        {item.name: node_containers[item.name] | default([]) + [
+          {
+            'id': item.vmid,
+            'name': item.name,
+            'node': current_node,
+            'status': item.status,
+            'type': 'lxc'
+          }
+        ]}, recursive=true)
+      }}
   loop: "{{ node_lxcs.json.data | default([]) }}"
   when: node_lxcs.json is defined and node_lxcs.json.data is defined
   delegate_to: localhost
 
 - name: Add VMs to the mapping on {{ current_node }}
   ansible.builtin.set_fact:
-    node_containers: "{{ node_containers | default({}) | combine({
-      item.name: node_containers[item.name] | default([]) + [{
-        'id': item.vmid,
-        'name': item.name,
-        'node': current_node,
-        'status': item.status,
-        'type': 'vm'
-      }]}, recursive=True) }}"
+    node_containers: >-
+      {{ node_containers | default({}) | combine(
+        {item.name: node_containers[item.name] | default([]) + [
+          {
+            'id': item.vmid,
+            'name': item.name,
+            'node': current_node,
+            'status': item.status,
+            'type': 'vm'
+          }
+        ]}, recursive=true)
+      }}
   loop: "{{ node_vms.json.data | default([]) }}"
   when: node_vms.json is defined and node_vms.json.data is defined
   delegate_to: localhost
@@ -83,15 +91,15 @@
 # Update the hostname_to_info_mapping for each hostname in ansible_play_hosts_all
 - name: Update hostname_to_info_mapping for {{ current_node }}
   ansible.builtin.set_fact:
-    hostname_to_info_mapping: "{{ hostname_to_info_mapping | combine({
-      item: matching_container}) }}"
+    hostname_to_info_mapping: >-
+      {{ hostname_to_info_mapping | combine({item: matching_container}) }}
   vars:
-    # Essayer de trouver un conteneur avec le même ID si défini dans l'inventaire
-    matching_container: "{{
-      (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | first)
-      if item in node_containers and hostvars[item].proxmox_id is defined and
-        (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | length > 0)
-      else (node_containers[item][0] if item in node_containers else {})}}"
+    # Try to find a container with the same ID if defined in inventory
+    matching_container: >-
+      {{ (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | first)
+        if item in node_containers and hostvars[item].proxmox_id is defined and
+            (node_containers[item] | selectattr('id', 'equalto', hostvars[item].proxmox_id | default(0) | int) | list | length > 0)
+        else (node_containers[item][0] if item in node_containers else {}) }}
   loop: "{{ ansible_play_hosts_all }}"
   when:
     - node_containers is defined
@@ -103,10 +111,11 @@
 # Log warning for duplicate hostnames
 - name: Log warning for duplicate hostnames on {{ current_node }}
   ansible.builtin.debug:
-    msg: "WARNING: Hostname '{{ item }}' has {{ node_containers[item] | length }} instances. Using the first one
+    msg: >-
+      WARNING: Hostname '{{ item }}' has {{ node_containers[item] | length }} instances. Using the first one
       ({{ node_containers[item][0].type }} with ID {{ node_containers[item][0].id }}).
       Other instances: {{ node_containers[item][1:] | map(attribute='type') | zip(node_containers[item][1:] |
-      map(attribute='id')) | map('join', ' with ID ') | join(', ') }}"
+      map(attribute='id')) | map('join', ' with ID ') | join(', ') }}
   loop: "{{ node_containers.keys() | list }}"
   when:
     - node_containers is defined
@@ -114,7 +123,7 @@
     - item in ansible_play_hosts_all
   delegate_to: localhost
 
-# Définir les variables pour chaque hôte individuellement
+# Define variables for each host individually
 - name: Save node, status, type, and ID to hostvars for each host
   ansible.builtin.set_fact:
     proxmox_node: "{{ hostname_to_info_mapping[item].node if item in hostname_to_info_mapping else '' }}"
@@ -143,8 +152,9 @@
 - name: Set proxmox_managements for all hosts
   ansible.builtin.set_fact:
     proxmox_management: >-
-      {% if hostvars[item].proxmox_type | default('') | lower == 'lxc' %}lxc{% elif hostvars[item].proxmox_type | default('') |
-        lower == 'vm' %}qemu{% else %}''{% endif %}
+      {{- 'lxc' if hostvars[item].proxmox_type | default('') | lower == 'lxc'
+          else 'qemu' if hostvars[item].proxmox_type | default('') | lower == 'vm'
+          else '' -}}
   loop: "{{ ansible_play_hosts_all }}"
   delegate_to: "{{ item }}"
   delegate_facts: true
